@@ -1,5 +1,5 @@
 import React from 'react';
-
+import useAuth from "../hooks/useAuth";
 const Navbar = ({ setPage }) => {
   const { user, logout } = useAuth();
   return (

@@ -1,12 +1,19 @@
 
+import { Outlet } from 'react-router'
 import './App.css'
+import Navbar from './components/Navbar'
+import Footer from './components/Footer'
 
 function App() {
-  
+
 
   return (
     <>
-      <h2>Blood Donation</h2>
+      <Navbar />
+      <div className="min-h-[calc(100vh-120px)]">
+        <Outlet />
+      </div>
+      <Footer />
     </>
   )
 }
