@@ -6,6 +6,7 @@ import AuthProvider from './context/AuthProvider'
 import Banner from './components/Banner'
 import WhyDonate from './components/WhyDonate'
 import ScrollingTicker from './components/ScrollingTicker'
+import StatsCounter from './components/StatsCounter'
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
         <Banner></Banner>
         <ScrollingTicker></ScrollingTicker>
         <WhyDonate></WhyDonate>
+        <StatsCounter></StatsCounter>
         <Outlet />
       </div>
       <Footer />
