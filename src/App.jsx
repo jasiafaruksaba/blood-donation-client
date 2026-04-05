@@ -7,6 +7,7 @@ import Banner from './components/Banner'
 import WhyDonate from './components/WhyDonate'
 import ScrollingTicker from './components/ScrollingTicker'
 import StatsCounter from './components/StatsCounter'
+import AboutSection from './components/AboutSection'
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Banner></Banner>
         <ScrollingTicker></ScrollingTicker>
         <WhyDonate></WhyDonate>
+        <AboutSection></AboutSection>
         <StatsCounter></StatsCounter>
         <Outlet />
       </div>
