@@ -1,79 +1,190 @@
+
 import { useEffect, useState } from "react";
 import useAuth from "../../hooks/useAuth";
-import axiosSecure from "../../api/axiosSecure";
+import useAxiosSecure from "../../hooks/useAxiosSecure";
+import { bdDistricts, bdUpazilas } from "../../data/bdLocations";
 
 const Profile = () => {
   const { user } = useAuth();
-  const [profile, setProfile] = useState({});
-  const [edit, setEdit] = useState(false);
+  const axiosSecure = useAxiosSecure();
 
+  const [profile, setProfile] = useState({});
+  const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [selectedDistrict, setSelectedDistrict] = useState("");
+
+  // Fetch profile
   useEffect(() => {
     if (user?.email) {
-      axiosSecure.get(`/users/${user.email}`).then((res) => {
-        setProfile(res.data);
-      });
+      axiosSecure.get(`/users/${user.email}`)
+        .then(res => {
+          const data = res.data;
+          setProfile(data);
+          setSelectedDistrict(data.district || "");
+        })
+        .catch(err => console.error("Failed to load profile:", err));
     }
-  }, [user]);
+  }, [user, axiosSecure]);
 
-  const handleUpdate = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
 
-    await axiosSecure.patch(`/users/${user.email}`, profile);
+    try {
+      
+      const updateData = {};
 
-    setEdit(false);
-    alert("Profile Updated");
+      if (profile.fullName || profile.name) {
+        updateData.fullName = profile.fullName || profile.name;   // একটা standardized করো
+      }
+      if (profile.bloodGroup) updateData.bloodGroup = profile.bloodGroup;
+      if (profile.district) updateData.district = profile.district;
+      if (profile.upazila) updateData.upazila = profile.upazila;
+      
+
+      if (Object.keys(updateData).length === 0) {
+        alert("কোনো পরিবর্তন করা হয়নি");
+        setLoading(false);
+        return;
+      }
+
+      const res = await axiosSecure.patch("/users/me", updateData);
+
+      alert("✅ Profile Updated Successfully!");
+      setIsEditing(false);
+
+      // Refresh
+      const profileRes = await axiosSecure.get(`/users/${user.email}`);
+      setProfile(profileRes.data);
+
+    } catch (err) {
+      console.error("Update error:", err.response?.data || err);
+
+      const msg = err.response?.data?.message ||
+        err.response?.data?.error ||
+        "Failed to update profile!";
+
+      alert(`❌ ${msg}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const upazilas = selectedDistrict ? bdUpazilas[selectedDistrict] || [] : [];
+
   return (
-    <div className="max-w-lg bg-white p-5 shadow">
-      <div className="flex justify-between mb-3">
-        <h2 className="text-xl font-bold">Profile</h2>
-        <button onClick={() => setEdit(!edit)} className="btn">
-          {edit ? "Cancel" : "Edit"}
+    <div className="max-w-3xl mx-auto bg-white rounded-3xl shadow-xl p-8">
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-3xl font-black text-slate-900">My Profile</h2>
+
+        <button
+          onClick={() => setIsEditing(!isEditing)}
+          className={`px-6 py-2.5 rounded-2xl font-bold transition-all ${isEditing
+              ? "bg-slate-200 text-slate-700 hover:bg-slate-300"
+              : "bg-red-600 hover:bg-red-700 text-white"
+            }`}
+        >
+          {isEditing ? "Cancel" : "Edit Profile"}
         </button>
       </div>
 
-      <form onSubmit={handleUpdate} className="space-y-3">
+      <form onSubmit={handleSubmit} className="space-y-6">
 
-        <input
-          value={profile.name || ""}
-          disabled={!edit}
-          onChange={(e) =>
-            setProfile({ ...profile, name: e.target.value })
-          }
-          className="input w-full"
-        />
+        {/* Avatar */}
+        <div className="flex justify-center mb-8">
+          <img
+            src={profile.avatar || user?.photoURL || "https://i.ibb.co.com/5Y3n3nZ/default-avatar.png"}
+            alt="Profile"
+            className="w-32 h-32 rounded-full border-4 border-red-100 object-cover shadow-md"
+          />
+        </div>
 
-        <input
-          value={profile.email || ""}
-          disabled
-          className="input w-full"
-        />
+        {/* Full Name */}
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Full Name</label>
+          <input
+            value={profile.name || profile.fullName || ""}   // Support both
+            onChange={(e) => setProfile({ ...profile, name: e.target.value, fullName: e.target.value })}
+            disabled={!isEditing}
+            className="w-full px-5 py-3 border border-slate-300 rounded-2xl focus:outline-none focus:border-red-500 disabled:bg-slate-100"
+          />
+        </div>
 
-        <input
-          value={profile.avatar || ""}
-          disabled={!edit}
-          onChange={(e) =>
-            setProfile({ ...profile, avatar: e.target.value })
-          }
-          className="input w-full"
-        />
+        {/* Email */}
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Email Address</label>
+          <input
+            value={profile.email || user?.email || ""}
+            disabled
+            className="w-full px-5 py-3 border border-slate-300 rounded-2xl bg-slate-100 cursor-not-allowed"
+          />
+        </div>
 
-        <input
-          value={profile.bloodGroup || ""}
-          disabled={!edit}
-          onChange={(e) =>
-            setProfile({ ...profile, bloodGroup: e.target.value })
-          }
-          className="input w-full"
-        />
+        {/* Blood Group */}
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Blood Group</label>
+          <select
+            value={profile.bloodGroup || ""}
+            onChange={(e) => setProfile({ ...profile, bloodGroup: e.target.value })}
+            disabled={!isEditing}
+            className="w-full px-5 py-3 border border-slate-300 rounded-2xl focus:outline-none disabled:bg-slate-100"
+          >
+            <option value="">Select Blood Group</option>
+            {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(bg => (
+              <option key={bg} value={bg}>{bg}</option>
+            ))}
+          </select>
+        </div>
 
-        {edit && (
-          <button className="btn btn-primary w-full">
-            Save
+        {/* District & Upazila */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1">District</label>
+            <select
+              value={profile.district || ""}
+              onChange={(e) => {
+                const newDistrict = e.target.value;
+                setProfile({ ...profile, district: newDistrict });
+                setSelectedDistrict(newDistrict);
+                // Reset upazila when district changes
+                setProfile(prev => ({ ...prev, upazila: "" }));
+              }}
+              disabled={!isEditing}
+              className="w-full px-5 py-3 border border-slate-300 rounded-2xl focus:outline-none disabled:bg-slate-100"
+            >
+              <option value="">Select District</option>
+              {bdDistricts.map(dist => (
+                <option key={dist} value={dist}>{dist}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1">Upazila</label>
+            <select
+              value={profile.upazila || ""}
+              onChange={(e) => setProfile({ ...profile, upazila: e.target.value })}
+              disabled={!isEditing || !selectedDistrict}
+              className="w-full px-5 py-3 border border-slate-300 rounded-2xl focus:outline-none disabled:bg-slate-100"
+            >
+              <option value="">Select Upazila</option>
+              {upazilas.map(up => (
+                <option key={up} value={up}>{up}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Save Button */}
+        {isEditing && (
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-bold py-4 rounded-2xl text-lg transition-all mt-4"
+          >
+            {loading ? "Saving Changes..." : "Save Changes"}
           </button>
         )}
-
       </form>
     </div>
   );

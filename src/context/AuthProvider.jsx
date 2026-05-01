@@ -1,3 +1,4 @@
+
 import { createContext, useEffect, useState } from "react";
 import {
   getAuth,
@@ -6,69 +7,101 @@ import {
   signInWithEmailAndPassword,
   updateProfile,
   signOut,
+  GoogleAuthProvider,
+  signInWithPopup,
 } from "firebase/auth";
-import app from "../../firebase/firebase.init.js";
+import app from "../../firebase/firebase.init";
 import axiosPublic from "../api/axiosPublic";
 
 export const AuthContext = createContext();
-
 const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
 
 const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // register
-  const registerUser = async (email, password, name, photo) => {
-    const result = await createUserWithEmailAndPassword(
-      auth,
-      email,
-      password
-    );
+  // Register User
+  const registerUser = async (email, password, userData) => {
+    setLoading(true);
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
 
-    await updateProfile(result.user, {
-      displayName: name,
-      photoURL: photo,
-    });
+      // ✅ Firebase profile update
+      await updateProfile(result.user, {
+        displayName: userData.name || "User",
+        photoURL: userData.photoURL || "",
+      });
 
-    // save user in DB
-    const userInfo = {
-      name,
-      email,
-      avatar: photo,
-      role: "donor",
-      status: "active",
-    };
+      // ✅ Backend DB save
+      await axiosPublic.post("/users", {
+        name: userData.name,
+        email: userData.email,
+        avatar: userData.photoURL,
+        district: userData.district,
+        upazila: userData.upazila,
+        role: "donor",
+        status: "active",
+      });
 
-    await axiosPublic.post("/users", userInfo);
-
-    return result;
+      return result.user;
+    } catch (error) {
+      console.error("Register Error:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // login
-  const loginUser = (email, password) => {
-    return signInWithEmailAndPassword(auth, email, password);
+  // Login User
+  const loginUser = async (email, password) => {
+    setLoading(true);
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      return result.user;
+    } catch (error) {
+      console.error("Firebase Login Error:", error.code, error.message);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // logout
-  const logoutUser = () => signOut(auth);
+  // Google Sign In
+  const googleSignIn = async () => {
+    setLoading(true);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
 
-  // observer
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
+      const userInfo = {
+        name: user.displayName,
+        email: user.email,
+        avatar: user.photoURL || "",
+        role: "donor",
+        status: "active",
+      };
 
-      if (currentUser?.email) {
-        // get JWT
-        const res = await axiosPublic.post("/jwt", {
-          email: currentUser.email,
+      // 🔥 SAFE API CALL
+      await axiosPublic.post("/users", userInfo)
+        .catch(err => {
+          console.log("User already exists or backend error:", err.message);
         });
 
-        localStorage.setItem("access-token", res.data.token);
-      } else {
-        localStorage.removeItem("access-token");
-      }
+      return user;
+    } catch (error) {
+      console.error("Google Sign In Error:", error.code, error.message);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const logoutUser = () => signOut(auth);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
       setLoading(false);
     });
 
@@ -80,6 +113,7 @@ const AuthProvider = ({ children }) => {
     loading,
     registerUser,
     loginUser,
+    googleSignIn,
     logoutUser,
   };
 

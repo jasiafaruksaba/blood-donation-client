@@ -1,29 +1,13 @@
-import { Outlet } from 'react-router'
-import './App.css'
-import Navbar from './components/Navbar'
-import Footer from './components/Footer'
-import AuthProvider from './context/AuthProvider' 
-import Banner from './components/Banner'
-import WhyDonate from './components/WhyDonate'
-import ScrollingTicker from './components/ScrollingTicker'
-import StatsCounter from './components/StatsCounter'
-import AboutSection from './components/AboutSection'
+
+import { Outlet } from "react-router";
+import AuthProvider from "./context/AuthProvider";
 
 function App() {
   return (
-    <AuthProvider> 
-      <Navbar  />
-      <div className="min-h-[calc(100vh-120px)]">
-        <Banner></Banner>
-        <ScrollingTicker></ScrollingTicker>
-        <WhyDonate></WhyDonate>
-        <AboutSection></AboutSection>
-        <StatsCounter></StatsCounter>
-        <Outlet />
-      </div>
-      <Footer />
+    <AuthProvider>
+      <Outlet />
     </AuthProvider>
-  )
+  );
 }
 
-export default App
+export default App;

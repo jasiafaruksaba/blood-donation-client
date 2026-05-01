@@ -1,24 +1,35 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import useAuth from "./useAuth";
-import axiosSecure from "../api/axiosSecure";
+import useAxiosSecure from "./useAxiosSecure";
 
 const useUserRole = () => {
-  const { user } = useAuth();
-  const [role, setRole] = useState(null);
-  const [status, setStatus] = useState(null);
+  const { user, loading: authLoading } = useAuth();
+  const axiosSecure = useAxiosSecure();
+
+  const [role, setRole] = useState("donor");
+  const [status, setStatus] = useState("active");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user?.email) {
-      axiosSecure.get(`/users/${user.email}`).then((res) => {
-        setRole(res.data.role);
-        setStatus(res.data.status);
+    const fetchRole = async () => {
+      // ✅ WAIT for auth
+      if (authLoading || !user?.email) return;
+
+      try {
+        const res = await axiosSecure.get("/users/me");
+
+        setRole(res.data.role || "donor");
+        setStatus(res.data.status || "active");
+      } catch (err) {
+        console.error("Role error:", err.message);
+      } finally {
         setLoading(false);
-      });
-    }
-  }, [user]);
+      }
+    };
+
+    fetchRole();
+  }, [user, authLoading, axiosSecure]);
 
   return { role, status, loading };
 };
-
 export default useUserRole;

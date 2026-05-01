@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import bloodDonateImg from "../assets/blood donation.png"
+import { Link } from "react-router";
 const Banner = () => {
   const [isVisible, setIsVisible] = useState(false);
 
@@ -42,7 +43,19 @@ const Banner = () => {
               Join our community and become a hero today by saving someone's life.
             </p>
             
-            
+            <div className="flex flex-col sm:flex-row gap-4 ">
+            <Link to="/register">
+              <button  className="bg-red-600 text-white px-6 py-2.5 rounded-xl font-bold text-base hover:bg-red-700 transition-all shadow-lg shadow-red-200 active:scale-95">
+                Join as Donor
+              </button>
+            </Link>
+
+            <Link to="/search">
+              <button  className="bg-rose-500 text-white px-6 py-2.5 rounded-xl font-bold text-base hover:bg-rose-700 transition-all shadow-lg shadow-red-200 active:scale-95">
+                Search Donors
+              </button>
+            </Link>
+          </div>
           </div>
 
           {/* Banner Image / Illustration */}
