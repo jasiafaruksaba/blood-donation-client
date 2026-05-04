@@ -10,25 +10,31 @@ const useUserRole = () => {
   const [status, setStatus] = useState("active");
   const [loading, setLoading] = useState(true);
 
+ const fetchRole = useCallback(async () => {
+  if (authLoading || !user?.email) {
+    setLoading(false);
+    return;
+  }
+
+  try {
+    const res = await axiosSecure.get("/users/me");
+    setRole(res.data.role || "donor");
+    setStatus(res.data.status || "active");
+  } catch (err) {
+    console.error("Role fetch failed:", err.response?.status);
+    // ✅ 404 হলে default donor, অন্য error হলে loading true রাখুন
+    if (err.response?.status === 404) {
+      setRole("donor");
+      setStatus("active");
+    }
+  } finally {
+    setLoading(false);
+  }
+}, [user, authLoading, axiosSecure]);
+
   useEffect(() => {
-    const fetchRole = async () => {
-      // ✅ WAIT for auth
-      if (authLoading || !user?.email) return;
-
-      try {
-        const res = await axiosSecure.get("/users/me");
-
-        setRole(res.data.role || "donor");
-        setStatus(res.data.status || "active");
-      } catch (err) {
-        console.error("Role error:", err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchRole();
-  }, [user, authLoading, axiosSecure]);
+  }, [fetchRole]);
 
   return { role, status, loading };
 };

@@ -31,40 +31,24 @@ const Profile = () => {
     setLoading(true);
 
     try {
-      
-      const updateData = {};
+      const updateData = {
+        name: profile.name || profile.fullName,
+        avatar: profile.avatar,
+        bloodGroup: profile.bloodGroup,
+        district: profile.district,
+        upazila: profile.upazila
+      };
 
-      if (profile.fullName || profile.name) {
-        updateData.fullName = profile.fullName || profile.name;   // একটা standardized করো
-      }
-      if (profile.bloodGroup) updateData.bloodGroup = profile.bloodGroup;
-      if (profile.district) updateData.district = profile.district;
-      if (profile.upazila) updateData.upazila = profile.upazila;
-      
+      // Remove empty fields
+      Object.keys(updateData).forEach(key =>
+        updateData[key] === undefined && delete updateData[key]
+      );
 
-      if (Object.keys(updateData).length === 0) {
-        alert("কোনো পরিবর্তন করা হয়নি");
-        setLoading(false);
-        return;
-      }
-
-      const res = await axiosSecure.patch("/users/me", updateData);
-
-      alert("✅ Profile Updated Successfully!");
+      await axiosSecure.patch("/users/me", updateData);
+      alert("✅ Profile updated!");
       setIsEditing(false);
-
-      // Refresh
-      const profileRes = await axiosSecure.get(`/users/${user.email}`);
-      setProfile(profileRes.data);
-
     } catch (err) {
-      console.error("Update error:", err.response?.data || err);
-
-      const msg = err.response?.data?.message ||
-        err.response?.data?.error ||
-        "Failed to update profile!";
-
-      alert(`❌ ${msg}`);
+      alert(err.response?.data?.message || "Update failed");
     } finally {
       setLoading(false);
     }
@@ -80,8 +64,8 @@ const Profile = () => {
         <button
           onClick={() => setIsEditing(!isEditing)}
           className={`px-6 py-2.5 rounded-2xl font-bold transition-all ${isEditing
-              ? "bg-slate-200 text-slate-700 hover:bg-slate-300"
-              : "bg-red-600 hover:bg-red-700 text-white"
+            ? "bg-slate-200 text-slate-700 hover:bg-slate-300"
+            : "bg-red-600 hover:bg-red-700 text-white"
             }`}
         >
           {isEditing ? "Cancel" : "Edit Profile"}
@@ -93,10 +77,11 @@ const Profile = () => {
         {/* Avatar */}
         <div className="flex justify-center mb-8">
           <img
-            src={profile.avatar || user?.photoURL || "https://i.ibb.co.com/5Y3n3nZ/default-avatar.png"}
+            src={profile.avatar || user?.photoURL || "https://ui-avatars.com/api/?name=" + encodeURIComponent(profile.name || "User")}
             alt="Profile"
             className="w-32 h-32 rounded-full border-4 border-red-100 object-cover shadow-md"
           />
+
         </div>
 
         {/* Full Name */}

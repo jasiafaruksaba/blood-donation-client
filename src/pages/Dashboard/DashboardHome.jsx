@@ -2,53 +2,63 @@ import { useEffect, useState } from "react";
 import useAuth from "../../hooks/useAuth";
 import useUserRole from "../../hooks/useUserRole";
 import useAxiosSecure from "../../hooks/useAxiosSecure";
-import { Link } from "react-router"; 
+import { Link, useNavigate } from "react-router";
+import {
+  FaUsers,
+  FaHeartbeat,
+  FaDollarSign,
+  FaFileInvoiceDollar,
+  FaClock,
+  FaCheckCircle,
+  FaTimesCircle,
+  FaEdit,
+  FaTrash,
+  FaEye,
+  FaPlusCircle
+} from "react-icons/fa";
+import { motion, AnimatePresence } from "framer-motion";
 
 const DashboardHome = () => {
-  const { user } = useAuth();
-  const { role, loading: roleLoading } = useUserRole();   
+  const { user, logOut } = useAuth();
+  const { role, loading: roleLoading, status } = useUserRole();
   const axiosSecure = useAxiosSecure();
+  const navigate = useNavigate();
 
   const [recentRequests, setRecentRequests] = useState([]);
-  const [stats, setStats] = useState({ 
-    totalUsers: 0, 
-    totalRequests: 0, 
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    totalRequests: 0,
     totalFunding: 0,
     pendingRequests: 0,
     activeUsers: 0
   });
   const [loading, setLoading] = useState(true);
-
+  const [deletingId, setDeletingId] = useState(null);
+  const [profile, setProfile] = useState(null);
   useEffect(() => {
     if (roleLoading || !role || !user?.email) return;
 
     const fetchData = async () => {
       setLoading(true);
       try {
+
+        const profileRes = await axiosSecure.get("/users/me").catch(() => ({}));
+        setProfile(profileRes.data);
         if (role === "donor") {
-          // Donor: Recent requests
-          try {
-            const res = await axiosSecure.get(`/donation-requests/my/${user.email}?limit=3&sort=-createdAt`);
-            setRecentRequests(Array.isArray(res.data) ? res.data : []);
-          } catch (err) {
-            console.log("No requests for donor:", err);
-            setRecentRequests([]);
-          }
+          //  DONOR: Only their own recent 3 requests
+          const res = await axiosSecure.get(`/donation-requests/my/${user.email}?limit=3`);
+          setRecentRequests(res.data.requests || []);
         } else {
-          // Admin/Volunteer: Fetch ALL data with fallback
+          //  ADMIN/VOLUNTEER: Full stats
           const [usersRes, requestsRes, paymentsRes] = await Promise.all([
-            // ✅ Users - direct count fallback
-            axiosSecure.get("/users").catch(() => ({ data: [] })),
-            // ✅ Requests - direct count fallback  
-            axiosSecure.get("/donation-requests").catch(() => ({ data: [] })),
-            // ✅ Payments - direct count fallback
-            axiosSecure.get("/payments").catch(() => ({ data: [] }))
+            axiosSecure.get("/users").catch(() => ({ data: { users: [] } })),
+            axiosSecure.get("/donation-requests").catch(() => ({ data: { requests: [] } })),
+            axiosSecure.get("/payments").catch(() => ({ data: { payments: [] } }))
           ]);
 
-          // ✅ Calculate stats manually (no stats endpoint needed)
-          const allUsers = Array.isArray(usersRes.data) ? usersRes.data : [];
-          const allRequests = Array.isArray(requestsRes.data) ? requestsRes.data : [];
-          const allPayments = Array.isArray(paymentsRes.data) ? paymentsRes.data : [];
+          const allUsers = usersRes.data.users || [];
+          const allRequests = requestsRes.data.requests || [];
+          const allPayments = paymentsRes.data.payments || [];
 
           setStats({
             totalUsers: allUsers.length,
@@ -68,255 +78,394 @@ const DashboardHome = () => {
     fetchData();
   }, [role, roleLoading, user?.email, axiosSecure]);
 
+  // ✅ Delete Request Handler
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this request?")) return;
+
+    setDeletingId(id);
+    try {
+      await axiosSecure.delete(`/donation-requests/${id}`);
+      setRecentRequests(prev => prev.filter(req => req._id !== id));
+      alert("Request deleted successfully!");
+    } catch (err) {
+      alert("Failed to delete request");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // ✅ Status Update Handler
+  const handleStatusUpdate = async (id, newStatus) => {
+    try {
+      await axiosSecure.patch(`/donation-requests/${id}/status`, { status: newStatus });
+      setRecentRequests(prev =>
+        prev.map(req =>
+          req._id === id ? { ...req, status: newStatus } : req
+        )
+      );
+    } catch (err) {
+      alert("Failed to update status");
+    }
+  };
+
+  // Loading State
   if (roleLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-red-50">
-        <div className="text-center">
-          <div className="loading loading-spinner loading-lg text-red-600 mb-4"></div>
-          <p className="text-xl text-slate-600">Loading dashboard...</p>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
+        >
+          <div className="w-16 h-16 border-4 border-red-200 border-t-red-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-xl font-semibold text-slate-600">Loading Dashboard...</p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Blocked User Check
+  if (status === "blocked") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-red-100">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center p-12 bg-white rounded-3xl shadow-2xl max-w-md mx-auto"
+        >
+          <div className="w-24 h-24 bg-red-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <FaTimesCircle className="w-12 h-12 text-red-500" />
+          </div>
+          <h2 className="text-3xl font-black text-red-600 mb-4">Access Blocked</h2>
+          <p className="text-lg text-slate-600 mb-8">Your account has been blocked by Admin.</p>
+          <button
+            onClick={logOut}
+            className="btn btn-outline btn-error w-full"
+          >
+            Logout
+          </button>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen space-y-8 p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-slate-50/50 to-red-50/20">
-      
-      {/* Welcome Header */}
-      <div className="bg-white/90 backdrop-blur-xl rounded-3xl p-8 lg:p-12 shadow-2xl border border-white/50">
-        <div className="text-center lg:text-left">
-          <h1 className="text-4xl lg:text-6xl font-black bg-gradient-to-r from-slate-900 via-slate-800 to-red-900 bg-clip-text text-transparent mb-4 leading-tight">
-            Welcome Back,
-          </h1>
-          <span className="block text-3xl lg:text-5xl bg-gradient-to-r from-red-600 via-orange-500 to-red-700 bg-clip-text text-transparent font-black px-6 py-3 rounded-3xl bg-white/50 shadow-xl inline-block">
-            {user?.displayName?.split(' ')[0] || 'Admin'}
-          </span>
-          <p className="text-xl lg:text-2xl text-slate-600 mt-6 max-w-2xl mx-auto lg:mx-0">
-            {role === 'admin' 
-              ? "Complete platform control. Manage users, requests & funding." 
-              : "Monitor all blood donation requests & platform stats."
-            }
-          </p>
-        </div>
-      </div>
-
-      {/* DONOR: Recent Requests */}
-      {role === "donor" && (
-        <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-white/50">
-          <div className="p-8 bg-gradient-to-r from-red-50 via-orange-50 to-red-50 border-b">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h2 className="text-3xl font-black text-slate-900 mb-1">Recent Requests</h2>
-                <p className="text-slate-600">{recentRequests.length} requests found</p>
-              </div>
-              <Link 
-                to="/dashboard/my-donation-requests" 
-                className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-8 py-4 rounded-3xl font-bold text-lg shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-1 whitespace-nowrap"
-              >
-                📋 View All Requests
-              </Link>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-red-50 to-orange-50 space-y-8 p-4 sm:p-6 lg:p-8">
+      {/* 🎉 Welcome Header */}
+      <motion.div
+        initial={{ y: -50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="bg-white/90 backdrop-blur-xl rounded-3xl p-8 lg:p-12 shadow-2xl border border-white/50"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div>
+            <h1 className="text-4xl lg:text-6xl font-black bg-gradient-to-r from-slate-900 via-red-900 to-orange-700 bg-clip-text text-transparent mb-4 leading-tight">
+              Welcome Back,
+              <br />
+              <span className="text-5xl lg:text-7xl">{profile?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'Hero'}</span>
+            </h1>
+            <p className="text-xl text-slate-600 font-semibold">
+              {role === 'donor' ? "👤 Your recent donation requests" :
+                role === 'admin' ? "🌐 Full platform control at your fingertips" :
+                  "🤝 Manage blood donation requests"}
+            </p>
           </div>
-
-          {recentRequests.length === 0 ? (
-            <div className="p-16 text-center bg-gradient-to-br from-yellow-50 to-orange-50">
-              <div className="text-6xl mb-6 mx-auto">🩸</div>
-              <h3 className="text-3xl font-black text-slate-800 mb-4">No requests yet</h3>
-              <p className="text-xl text-slate-600 mb-8 max-w-lg mx-auto">
-                Create your first blood donation request to help someone in need.
-              </p>
-              <Link 
-                to="/dashboard/create-donation-request"
-                className="inline-flex items-center gap-3 bg-gradient-to-r from-red-600 to-red-700 text-white px-10 py-5 rounded-3xl font-bold text-xl hover:from-red-700 hover:to-red-800 shadow-2xl hover:shadow-3xl transition-all transform hover:-translate-y-2"
-              >
-                🆕 Create First Request
+          <div className="flex gap-4">
+            <Link
+              to="/dashboard/create-donation-request"
+              className="btn btn-primary btn-lg shadow-xl hover:shadow-2xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700"
+            >
+              <FaPlusCircle className="mr-2" /> New Request
+            </Link>
+            {role === 'admin' && (
+              <Link to="/dashboard/all-users" className="btn btn-outline btn-accent btn-lg">
+                Manage Users
               </Link>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="table w-full">
-                <thead className="bg-slate-100">
-                  <tr>
-                    <th>Recipient</th>
-                    <th>Location</th>
-                    <th>Blood Group</th>
-                    <th>Date & Time</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentRequests.map((req) => (
-                    <tr key={req._id} className="hover:bg-red-50/50">
-                      <td>
-                        <div className="font-bold">{req.recipientName}</div>
-                        <div className="text-sm text-slate-600">{req.hospital}</div>
-                      </td>
-                      <td>
-                        <div className="font-medium">{req.recipientDistrict}</div>
-                        <div className="text-sm">{req.recipientUpazila}</div>
-                      </td>
-                      <td>
-                        <span className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white font-bold rounded-full text-sm shadow-md">
-                          {req.bloodGroup}
-                        </span>
-                      </td>
-                      <td className="font-medium">
-                        <div>{req.donationDate}</div>
-                        <div className="text-sm text-slate-500">{req.donationTime}</div>
-                      </td>
-                      <td>
-                        <span className={`px-4 py-2 rounded-full text-xs font-bold text-white shadow-sm ${
-                          req.status === "pending" ? "bg-gradient-to-r from-yellow-500 to-orange-500" :
-                          req.status === "inprogress" ? "bg-gradient-to-r from-blue-500 to-blue-600" :
-                          req.status === "done" ? "bg-gradient-to-r from-emerald-500 to-teal-500" :
-                          "bg-gradient-to-r from-rose-500 to-red-600"
-                        }`}>
-                          {req.status?.toUpperCase()}
-                        </span>
-                      </td>
-                      <td>
-                        <Link 
-                          to={`/dashboard/donation-request-details/${req._id}`}
-                          className="btn btn-primary btn-sm"
+            )}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* 🔥 Role-based Content */}
+      <AnimatePresence mode="wait">
+        {role === "donor" ? (
+          <motion.div
+            key="donor"
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -50 }}
+            className="space-y-8"
+          >
+            {/* 📋 Recent Requests Table */}
+            {recentRequests.length > 0 ? (
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-white/50"
+              >
+                <div className="p-8 border-b border-slate-200">
+                  <h2 className="text-3xl font-bold bg-gradient-to-r from-red-600 to-orange-600 bg-clip-text text-transparent flex items-center gap-3">
+                    <FaClock className="w-8 h-8" />
+                    Recent 3 Requests
+                  </h2>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="table w-full">
+                    <thead>
+                      <tr className="bg-gradient-to-r from-red-50 to-orange-50">
+                        <th>Recipient</th>
+                        <th>Location</th>
+                        <th>Date & Time</th>
+                        <th>Blood Group</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentRequests.map((request) => (
+                        <motion.tr
+                          key={request._id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="hover:bg-red-50/50 transition-all duration-200 border-b border-slate-100"
                         >
-                          View
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ADMIN/VOLUNTEER: Stats Cards */}
-      {(role === "admin" || role === "volunteer") && (
-        <>
-          {/* Quick Stats Row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div className="stat stat-card bg-gradient-to-r from-blue-500 to-blue-600 text-white p-6 rounded-3xl shadow-2xl">
-              <div className="stat-figure text-3xl opacity-75">🩸</div>
-              <div className="stat-title">Pending Requests</div>
-              <div className="stat-value text-3xl font-black">{stats.pendingRequests}</div>
-            </div>
-            <div className="stat stat-card bg-gradient-to-r from-emerald-500 to-emerald-600 text-white p-6 rounded-3xl shadow-2xl">
-              <div className="stat-figure text-3xl opacity-75">👥</div>
-              <div className="stat-title">Active Users</div>
-              <div className="stat-value text-3xl font-black">{stats.activeUsers}</div>
-            </div>
-            <div className="stat stat-card bg-gradient-to-r from-purple-500 to-purple-600 text-white p-6 rounded-3xl shadow-2xl">
-              <div className="stat-figure text-3xl opacity-75">📊</div>
-              <div className="stat-title">Total Requests</div>
-              <div className="stat-value text-3xl font-black">{stats.totalRequests}</div>
-            </div>
-            <div className="stat stat-card bg-gradient-to-r from-orange-500 to-orange-600 text-white p-6 rounded-3xl shadow-2xl">
-              <div className="stat-figure text-3xl opacity-75">💰</div>
-              <div className="stat-title">Total Funding</div>
-              <div className="stat-value text-3xl font-black">
-                ৳{stats.totalFunding.toLocaleString()}
-              </div>
-            </div>
-          </div>
-
-          {/* Main Stats Cards with Buttons */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* Users Card */}
-            <Link to="/dashboard/all-users" className="group">
-              <div className="group bg-gradient-to-br from-indigo-500 via-blue-500 to-indigo-600 p-10 rounded-3xl text-white shadow-2xl hover:shadow-3xl hover:-translate-y-2 transition-all duration-300 border-4 border-transparent hover:border-white/30 cursor-pointer overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="text-6xl mb-6 mx-auto w-24 h-24 bg-white/20 rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 relative z-10">
-                  👥
+                          <td className="font-semibold">{request.recipientName}</td>
+                          <td>
+                            <div>
+                              <div className="font-medium">{request.recipientDistrict}</div>
+                              <div className="text-sm text-slate-500">{request.recipientUpazila}</div>
+                            </div>
+                          </td>
+                          <td>
+                            <div>{new Date(request.donationDate).toLocaleDateString()}</div>
+                            <div className="text-sm text-slate-500">{request.donationTime}</div>
+                          </td>
+                          <td>
+                            <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-semibold">
+                              {request.bloodGroup}
+                            </span>
+                          </td>
+                          <td>
+                            {request.status === 'pending' && (
+                              <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-semibold">
+                                Pending
+                              </span>
+                            )}
+                            {request.status === 'inprogress' && (
+                              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
+                                In Progress
+                              </span>
+                            )}
+                            {request.status === 'done' && (
+                              <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-semibold">
+                                Done
+                              </span>
+                            )}
+                            {request.status === 'cancelled' && (
+                              <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-semibold">
+                                Cancelled
+                              </span>
+                            )}
+                          </td>
+                          <td className="flex gap-2">
+                            <Link
+                              to={`/dashboard/donation-request/${request._id}`}
+                              className="btn btn-ghost btn-xs"
+                              title="View Details"
+                            >
+                              <FaEye />
+                            </Link>
+                            {request.status === 'inprogress' && (
+                              <>
+                                <button
+                                  onClick={() => handleStatusUpdate(request._id, 'done')}
+                                  className="btn btn-success btn-xs"
+                                  title="Mark as Done"
+                                >
+                                  <FaCheckCircle />
+                                </button>
+                                <button
+                                  onClick={() => handleStatusUpdate(request._id, 'cancelled')}
+                                  className="btn btn-error btn-xs"
+                                  title="Cancel"
+                                >
+                                  <FaTimesCircle />
+                                </button>
+                              </>
+                            )}
+                            <Link
+                              to={`/dashboard/edit-donation-request/${request._id}`}
+                              className="btn btn-warning btn-xs"
+                              title="Edit"
+                            >
+                              <FaEdit />
+                            </Link>
+                            <button
+                              onClick={() => handleDelete(request._id)}
+                              disabled={deletingId === request._id}
+                              className="btn btn-error btn-xs"
+                              title="Delete"
+                            >
+                              {deletingId === request._id ? (
+                                <span className="loading loading-spinner loading-xs"></span>
+                              ) : (
+                                <FaTrash />
+                              )}
+                            </button>
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <div className="relative z-10 text-center space-y-3">
-                  <p className="text-5xl lg:text-6xl font-black mb-2">
-                    {stats.totalUsers.toLocaleString()}
-                  </p>
-                  <p className="text-2xl font-bold mb-4">Total Users</p>
-                  <p className="text-white/90 text-lg">Donors + Volunteers + Admins</p>
+
+                <div className="p-8 bg-gradient-to-r from-red-50 to-orange-50 border-t border-slate-200">
+                  <Link
+                    to="/dashboard/my-donation-requests"
+                    className="btn btn-primary btn-lg shadow-xl hover:shadow-2xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 flex items-center gap-2 mx-auto"
+                  >
+                    <FaFileInvoiceDollar />
+                    View All My Requests
+                  </Link>
                 </div>
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-4/5 opacity-0 group-hover:opacity-100 transition-all duration-300">
-                  <div className="flex gap-2 justify-center">
-                    <span className="px-4 py-2 bg-white/20 backdrop-blur-sm rounded-2xl text-xs font-bold">Active: {stats.activeUsers}</span>
+              </motion.div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white/80 backdrop-blur-xl rounded-3xl p-16 text-center shadow-2xl border border-white/50"
+              >
+                <div className="w-24 h-24 bg-gradient-to-br from-red-100 to-orange-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                  <FaHeartbeat className="w-12 h-12 text-red-500" />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-800 mb-4">No Requests Yet</h3>
+                <p className="text-lg text-slate-600 mb-8">Create your first blood donation request to help someone in need.</p>
+                <Link
+                  to="/dashboard/create-donation-request"
+                  className="btn btn-primary btn-lg shadow-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700"
+                >
+                  Create First Request
+                </Link>
+              </motion.div>
+            )}
+          </motion.div>
+        ) : (
+          // 🔥 ADMIN/VOLUNTEER Dashboard
+          <motion.div
+            key="admin"
+            initial={{ opacity: 0, x: -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 50 }}
+            className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6"
+          >
+            {/* Stats Cards */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="lg:col-span-2 xl:col-span-4"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+                {/* Total Users */}
+                <motion.div
+                  whileHover={{ scale: 1.02, y: -5 }}
+                  className="group bg-white/90 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/50 hover:shadow-3xl transition-all duration-300 cursor-pointer"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center group-hover:rotate-12 transition-transform duration-300">
+                      <FaUsers className="w-8 h-8 text-white" />
+                    </div>
+                    <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
                   </div>
-                </div>
-              </div>
-            </Link>
+                  <h3 className="text-3xl font-black text-slate-900 mb-2">{stats.totalUsers.toLocaleString()}</h3>
+                  <p className="text-slate-600 font-semibold text-lg">Total Users</p>
+                  <p className="text-sm text-green-600 font-medium mt-1">+12% this month</p>
+                </motion.div>
 
-            {/* Requests Card */}
-            <Link to="/dashboard/all-blood-donation-request" className="group">
-              <div className="group bg-gradient-to-br from-red-500 via-orange-500 to-red-600 p-10 rounded-3xl text-white shadow-2xl hover:shadow-3xl hover:-translate-y-2 transition-all duration-300 border-4 border-transparent hover:border-white/30 cursor-pointer overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="text-6xl mb-6 mx-auto w-24 h-24 bg-white/20 rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 relative z-10">
-                  🩸
-                </div>
-                <div className="relative z-10 text-center space-y-3">
-                  <p className="text-5xl lg:text-6xl font-black mb-2">
-                    {stats.totalRequests.toLocaleString()}
-                  </p>
-                  <p className="text-2xl font-bold mb-4">Blood Requests</p>
-                  <p className="text-white/90 text-lg">All statuses included</p>
-                </div>
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-4/5 opacity-0 group-hover:opacity-100 transition-all duration-300">
-                  <div className="flex gap-2 justify-center">
-                    <span className="px-4 py-2 bg-white/20 backdrop-blur-sm rounded-2xl text-xs font-bold bg-red-500/30">Pending: {stats.pendingRequests}</span>
+                {/* Total Requests */}
+                <motion.div
+                  whileHover={{ scale: 1.02, y: -5 }}
+                  className="group bg-white/90 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/50 hover:shadow-3xl transition-all duration-300 cursor-pointer"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-red-500 to-orange-600 rounded-2xl flex items-center justify-center group-hover:rotate-12 transition-transform duration-300">
+                      <FaHeartbeat className="w-8 h-8 text-white" />
+                    </div>
+                    <div className="w-3 h-3 bg-yellow-400 rounded-full animate-pulse"></div>
                   </div>
-                </div>
-              </div>
-            </Link>
+                  <h3 className="text-3xl font-black text-slate-900 mb-2">{stats.totalRequests.toLocaleString()}</h3>
+                  <p className="text-slate-600 font-semibold text-lg">Total Requests</p>
+                  <p className="text-sm text-orange-600 font-medium mt-1">{stats.pendingRequests} pending</p>
+                </motion.div>
 
-            {/* Funding Card */}
-            <Link to="/dashboard/funding" className="group">
-              <div className="group bg-gradient-to-br from-emerald-500 via-teal-500 to-emerald-600 p-10 rounded-3xl text-white shadow-2xl hover:shadow-3xl hover:-translate-y-2 transition-all duration-300 border-4 border-transparent hover:border-white/30 cursor-pointer overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="text-6xl mb-6 mx-auto w-24 h-24 bg-white/20 rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 relative z-10">
-                  💰
-                </div>
-                <div className="relative z-10 text-center space-y-3">
-                  <p className="text-5xl lg:text-6xl font-black mb-2">
+                {/* Total Funding */}
+                <motion.div
+                  whileHover={{ scale: 1.02, y: -5 }}
+                  className="group bg-white/90 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/50 hover:shadow-3xl transition-all duration-300 cursor-pointer"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center group-hover:rotate-12 transition-transform duration-300">
+                      <FaDollarSign className="w-8 h-8 text-white" />
+                    </div>
+                    <div className="w-3 h-3 bg-emerald-400 rounded-full animate-pulse"></div>
+                  </div>
+                  <h3 className="text-3xl font-black text-slate-900 mb-2">
                     ৳{stats.totalFunding.toLocaleString()}
-                  </p>
-                  <p className="text-2xl font-bold mb-4">Total Funding</p>
-                  <p className="text-white/90 text-lg">Community donations</p>
-                </div>
-              </div>
-            </Link>
-          </div>
+                  </h3>
+                  <p className="text-slate-600 font-semibold text-lg">Total Funding</p>
+                  <p className="text-sm text-emerald-600 font-medium mt-1">+25% growth</p>
+                </motion.div>
 
-          {/* Quick Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-12">
-            <Link to="/dashboard/all-users" className="group p-10 bg-white/80 backdrop-blur-xl rounded-3xl hover:shadow-2xl hover:-translate-y-2 transition-all border border-slate-200 hover:border-red-300 text-center">
-              <div className="text-5xl mb-6 mx-auto group-hover:scale-110 transition-transform">👥</div>
-              <h3 className="text-2xl font-black text-slate-900 mb-4">Manage Users</h3>
-              <p className="text-slate-600 mb-6">Block/unblock, promote to admin/volunteer</p>
-              <div className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-8 py-4 rounded-3xl font-bold shadow-xl hover:shadow-2xl transition-all">
-                Go to Users →
+                {/* Active Users */}
+                <motion.div
+                  whileHover={{ scale: 1.02, y: -5 }}
+                  className="group bg-white/90 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/50 hover:shadow-3xl transition-all duration-300 cursor-pointer"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center group-hover:rotate-12 transition-transform duration-300">
+                      <FaUsers className="w-8 h-8 text-white" />
+                    </div>
+                    <div className="w-3 h-3 bg-purple-400 rounded-full animate-pulse"></div>
+                  </div>
+                  <h3 className="text-3xl font-black text-slate-900 mb-2">{stats.activeUsers.toLocaleString()}</h3>
+                  <p className="text-slate-600 font-semibold text-lg">Active Users</p>
+                  <p className="text-sm text-purple-600 font-medium mt-1">Real-time</p>
+                </motion.div>
+
+                {/* Quick Action Card */}
+                <motion.div
+                  whileHover={{ scale: 1.02, y: -5 }}
+                  className="group bg-gradient-to-br from-red-600 to-orange-600 text-white rounded-3xl p-8 shadow-2xl hover:shadow-3xl transition-all duration-300 cursor-pointer col-span-2 md:col-span-1"
+                >
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-2xl font-black">Quick Actions</h3>
+                    <FaPlusCircle className="w-8 h-8 group-hover:rotate-12 transition-transform duration-300" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <Link to="/dashboard/all-blood-donation-request" className="flex items-center gap-2 p-3 rounded-xl bg-white/20 hover:bg-white/30 transition-all">
+                      <FaHeartbeat className="w-5 h-5" /> All Requests
+                    </Link>
+                    <Link to="/dashboard/funding" className="flex items-center gap-2 p-3 rounded-xl bg-white/20 hover:bg-white/30 transition-all">
+                      <FaDollarSign className="w-5 h-5" /> Funding
+                    </Link>
+                    {role === 'admin' && (
+                      <>
+                        <Link to="/dashboard/all-users" className="flex items-center gap-2 p-3 rounded-xl bg-white/20 hover:bg-white/30 transition-all">
+                          <FaUsers className="w-5 h-5" /> Manage Users
+                        </Link>
+                        <Link to="/dashboard/all-blood-donation-request" className="flex items-center gap-2 p-3 rounded-xl bg-white/20 hover:bg-white/30 transition-all">
+                          <FaClock className="w-5 h-5" /> Pending Requests
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                </motion.div>
               </div>
-            </Link>
-            
-            <Link to="/dashboard/all-blood-donation-request" className="group p-10 bg-white/80 backdrop-blur-xl rounded-3xl hover:shadow-2xl hover:-translate-y-2 transition-all border border-slate-200 hover:border-blue-300 text-center">
-              <div className="text-5xl mb-6 mx-auto group-hover:scale-110 transition-transform">🩸</div>
-              <h3 className="text-2xl font-black text-slate-900 mb-4">All Requests</h3>
-              <p className="text-slate-600 mb-6">{stats.pendingRequests} pending requests</p>
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-8 py-4 rounded-3xl font-bold shadow-xl hover:shadow-2xl transition-all">
-                Manage Requests →
-              </div>
-            </Link>
-            
-            <Link to="/dashboard/funding" className="group p-10 bg-white/80 backdrop-blur-xl rounded-3xl hover:shadow-2xl hover:-translate-y-2 transition-all border border-slate-200 hover:border-emerald-300 text-center">
-              <div className="text-5xl mb-6 mx-auto group-hover:scale-110 transition-transform">💰</div>
-              <h3 className="text-2xl font-black text-slate-900 mb-4">Funding</h3>
-              <p className="text-slate-600 mb-6">View donations & contribute</p>
-              <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white px-8 py-4 rounded-3xl font-bold shadow-xl hover:shadow-2xl transition-all">
-                View Funding →
-              </div>
-            </Link>
-          </div>
-        </>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

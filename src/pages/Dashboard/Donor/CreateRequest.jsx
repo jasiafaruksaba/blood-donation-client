@@ -7,6 +7,7 @@ import { bdDistricts, bdUpazilas } from "../../../data/bdLocations";
 
 const CreateRequest = () => {
   const { user } = useAuth();
+  
   const axiosSecure = useAxiosSecure();
   const { status } = useUserRole();
 
@@ -14,36 +15,37 @@ const CreateRequest = () => {
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm();
 
-  const onSubmit = async (data) => {
-    if (status === "blocked") {
-      alert("❌ You are blocked by admin. Cannot create request.");
-      return;
-    }
+ const onSubmit = async (data) => {
+  if (status === "blocked") {
+    alert("❌ You are blocked by admin. Cannot create request.");
+    return;
+  }
 
-    const requestData = {
-      requesterName: user.displayName,
-      requesterEmail: user.email,
-      recipientName: data.recipientName,
-      recipientDistrict: data.recipientDistrict,
-      recipientUpazila: data.recipientUpazila,
-      hospital: data.hospital,
-      fullAddress: data.fullAddress,
-      bloodGroup: data.bloodGroup,
-      donationDate: data.donationDate,
-      donationTime: data.donationTime,
-      message: data.message,
-      status: "pending",
-    };
-
-    try {
-      await axiosSecure.post("/donation-requests", requestData);
-      alert("✅ Donation Request Created Successfully!");
-      reset();
-      setSelectedDistrict("");
-    } catch (err) {
-      alert("❌ Failed to create request!");
-    }
+  const requestData = {
+    recipientName: data.recipientName,
+    recipientDistrict: data.recipientDistrict,
+    recipientUpazila: data.recipientUpazila,
+    hospital: data.hospital,
+    fullAddress: data.fullAddress,
+    bloodGroup: data.bloodGroup,
+    donationDate: data.donationDate,
+    donationTime: data.donationTime,
+    message: data.message,
   };
+
+  try {
+    console.log("📤 Sending:", requestData);
+    // ✅ FIXED: /api/ সরিয়ে দিন
+    const res = await axiosSecure.post("/donation-requests", requestData);
+    console.log("✅ Created:", res.data);
+    alert("✅ Donation Request Created Successfully!");
+    reset();
+    setSelectedDistrict("");
+  } catch (err) {
+    console.error("❌ Error:", err.response?.data);
+    alert(`❌ Failed: ${err.response?.data?.message || err.message}`);
+  }
+};
 
   const upazilas = selectedDistrict ? bdUpazilas[selectedDistrict] || [] : [];
 

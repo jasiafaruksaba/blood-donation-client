@@ -22,32 +22,25 @@ const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   // Register User
-  const registerUser = async (email, password, userData) => {
+  const registerUser = async (email, password, userData = {}) => {
     setLoading(true);
     try {
       const result = await createUserWithEmailAndPassword(auth, email, password);
 
-      // ✅ Firebase profile update
+      // ✅ Safe access - কোন error হবে না
+      const displayName = userData?.name || "LifeDrop User";
+      const photoURL = userData?.avatar || "";
+
       await updateProfile(result.user, {
-        displayName: userData.name || "User",
-        photoURL: userData.photoURL || "",
+        displayName,
+        photoURL,
       });
 
-      // ✅ Backend DB save
-      await axiosPublic.post("/users", {
-        name: userData.name,
-        email: userData.email,
-        avatar: userData.photoURL,
-        district: userData.district,
-        upazila: userData.upazila,
-        role: "donor",
-        status: "active",
-      });
-
+      console.log("✅ Firebase user created:", displayName);
       return result.user;
     } catch (error) {
-      console.error("Register Error:", error);
-      throw error;
+      console.error("Register Error:", error.message);
+      throw new Error(error.message);
     } finally {
       setLoading(false);
     }
